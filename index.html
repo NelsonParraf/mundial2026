@@ -67,6 +67,16 @@ tr.q1{background:#d6f5e3;} tr.q3{background:#fef6dc;} tr.out{background:#fde8e8;
 .ko .pen button.on{background:var(--oro);border-color:#d97706;font-weight:900;}
 .ko .adv{font-size:11px;font-weight:800;color:#047857;margin-top:3px;display:flex;align-items:center;gap:5px;}
 footer{text-align:center;color:#7fc9a6;font-size:10px;padding-bottom:18px;}
+.dia{margin-bottom:14px;}
+.dia h4{background:#065f46;color:#fde68a;font-size:13px;font-weight:900;padding:7px 12px;border-radius:10px;margin-bottom:7px;position:sticky;top:0;z-index:2;}
+.dm{background:#fff;border:1px solid #d3ecdf;border-radius:12px;padding:7px 9px;margin-bottom:6px;box-shadow:0 1px 4px rgba(0,0,0,.06);}
+.dm .top{display:flex;justify-content:space-between;font-size:10px;color:#64748b;margin-bottom:3px;gap:4px;flex-wrap:wrap;}
+.dm .top b{color:#047857;}
+.dm .fila{display:flex;align-items:center;gap:6px;}
+.dm .fila .t{flex:1;font-size:13px;font-weight:600;display:flex;align-items:center;gap:5px;overflow:hidden;white-space:nowrap;text-overflow:ellipsis;}
+.dm .fila .t.r{justify-content:flex-end;}
+.dm .ph2{color:#94a3b8;font-style:italic;font-size:12px;}
+.dm .gana{font-size:11px;font-weight:800;color:#047857;margin-top:2px;}
 .reset{display:block;margin:14px auto 0;border:none;background:#fee2e2;color:#b91c1c;font-weight:700;font-size:12px;padding:8px 16px;border-radius:99px;cursor:pointer;}
 </style>
 </head>
@@ -80,6 +90,7 @@ footer{text-align:center;color:#7fc9a6;font-size:10px;padding-bottom:18px;}
 </header>
 <nav>
   <button data-t="grupos" class="on">⚽ Grupos</button>
+  <button data-t="dias">📅 Por día</button>
   <button data-t="terceros">🥉 3ros</button>
   <button data-t="llaves">🏟️ Llaves</button>
 </nav>
@@ -91,6 +102,10 @@ footer{text-align:center;color:#7fc9a6;font-size:10px;padding-bottom:18px;}
     <h3>Tabla de posiciones</h3>
     <div id="tabla"></div>
     <div class="note">🟩 1º y 2º clasifican directo · 🟨 3º compite por los 8 mejores cupos</div>
+  </div>
+  <div id="dias" class="tab">
+    <h3>Calendario día a día — hora de Chile</h3>
+    <div id="listaDias"></div>
   </div>
   <div id="terceros" class="tab">
     <h3>Ranking de terceros — los 8 mejores avanzan</h3>
@@ -259,6 +274,66 @@ function teamsOf(mid){
 }
 const team2=(o)=>[o.name,o.e,o.c];
 
+
+// ===== VISTA POR DÍA =====
+const ORDEN_FECHA=(f)=>{const [d,m]=f.split(" ");return (m==="jun"?600:700)+parseInt(d);};
+function todosLosPartidos(){
+  const arr=[];
+  for(const L of LET) for(const m of FIX[L])
+    arr.push({tipo:"g",p:m.p,L,h:m.h,a:m.a,j:m.j,f:m.f,t:m.t,v:m.v,fase:"Grupo "+L+" · J"+m.j});
+  for(const [mid,v] of Object.entries(R32)) arr.push({tipo:"k",p:+mid,f:v.f,t:v.t,v:v.v,fase:"Dieciseisavos"});
+  for(const [mid,v] of Object.entries(R16)) arr.push({tipo:"k",p:+mid,f:v[2],t:v[3],v:v[4],fase:"Octavos"});
+  for(const [mid,v] of Object.entries(QF))  arr.push({tipo:"k",p:+mid,f:v[2],t:v[3],v:v[4],fase:"Cuartos"});
+  for(const [mid,v] of Object.entries(SF2)) arr.push({tipo:"k",p:+mid,f:v[2],t:v[3],v:v[4],fase:"Semifinal"});
+  arr.push({tipo:"k",p:103,f:M103[0],t:M103[1],v:M103[2],fase:"Tercer puesto"});
+  arr.push({tipo:"k",p:104,f:M104[0],t:M104[1],v:M104[2],fase:"🏆 FINAL"});
+  arr.sort((x,y)=>ORDEN_FECHA(x.f)-ORDEN_FECHA(y.f)||x.t.localeCompare(y.t)||x.p-y.p);
+  return arr;
+}
+function renderDias(){
+  const arr=todosLosPartidos();
+  const dias={};
+  for(const m of arr){ (dias[m.f]=dias[m.f]||[]).push(m); }
+  const DIASEM={611:"Jueves",612:"Viernes",613:"Sábado",614:"Domingo"};
+  let html="";
+  for(const f of Object.keys(dias).sort((a,b)=>ORDEN_FECHA(a)-ORDEN_FECHA(b))){
+    html+=`<div class="dia"><h4>📅 ${f} · ${dias[f].length} partido${dias[f].length>1?"s":""}</h4>`;
+    for(const m of dias[f]){
+      if(m.tipo==="g"){
+        const T1=GRUPOS[m.L][m.h],T2=GRUPOS[m.L][m.a];
+        const s=S.scores["p"+m.p]||["",""];
+        html+=`<div class="dm">
+          <div class="top"><span><b>${m.t} hrs</b> · ${m.fase} · P${m.p}</span><span>${SEDE[m.v][0]} — ${SEDE[m.v][1]}</span></div>
+          <div class="fila">
+            <span class="t r">${T1[0]} ${flag(T1)}</span>
+            <input class="sc" type="number" min="0" inputmode="numeric" value="${s[0]}" onchange="setScore(${m.p},0,this.value)">
+            <b style="color:#94a3b8">:</b>
+            <input class="sc" type="number" min="0" inputmode="numeric" value="${s[1]}" onchange="setScore(${m.p},1,this.value)">
+            <span class="t">${flag(T2)} ${T2[0]}</span>
+          </div></div>`;
+      } else {
+        const [A,B]=teamsOf(m.p); const ks=S.ko[m.p]||{}; const w=winner(m.p);
+        const nm=(tm)=> tm?`${flag(team2(tm))} ${tm.name}`:`<span class="ph2">por definir</span>`;
+        const empate=ks.a!==""&&ks.b!==""&&ks.a!=null&&ks.b!=null&&+ks.a===+ks.b&&!ks.pen;
+        html+=`<div class="dm" style="${m.p===104?'border:2px solid var(--oro);background:#fffbeb;':''}">
+          <div class="top"><span><b>${m.t} hrs</b> · ${m.fase} · P${m.p}</span><span>${SEDE[m.v][0]} — ${SEDE[m.v][1]}</span></div>
+          <div class="fila">
+            <span class="t r">${A?A.name+" ":""}${A?flag(team2(A)):'<span class="ph2">por definir</span>'}</span>
+            <input class="sc" type="number" min="0" inputmode="numeric" value="${ks.a??""}" onchange="setKo(${m.p},'a',this.value)">
+            <b style="color:#94a3b8">:</b>
+            <input class="sc" type="number" min="0" inputmode="numeric" value="${ks.b??""}" onchange="setKo(${m.p},'b',this.value)">
+            <span class="t">${B?flag(team2(B))+" "+B.name:'<span class="ph2">por definir</span>'}</span>
+          </div>
+          ${empate?`<div class="gana" style="color:#b45309">⚖️ Empate: define los penales en la pestaña Llaves</div>`:""}
+          ${w?`<div class="gana">✅ Avanza: ${flag(team2(w))} ${w.name}</div>`:""}
+        </div>`;
+      }
+    }
+    html+=`</div>`;
+  }
+  document.getElementById("listaDias").innerHTML=html;
+}
+
 // ===== RENDER =====
 function render(){
   document.getElementById("gsel").innerHTML=LET.map(L=>
@@ -318,6 +393,7 @@ function render(){
   ];
   document.getElementById("cuadro").innerHTML=fases.map(([tit,ps,g4])=>
     `<div class="fase"><h3>${tit}</h3><div class="kogrid ${g4}">${ps.map(([m,f,t,v])=>koCard(m,f,t,v)).join("")}</div></div>`).join("");
+  renderDias();
   const c=winner(104), el=document.getElementById("champ");
   if(c){el.style.display="block";el.innerHTML="🏆 CAMPEÓN: "+flag(team2(c))+" "+c.name+" 🏆";}else el.style.display="none";
 }
