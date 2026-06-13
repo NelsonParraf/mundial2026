@@ -77,6 +77,19 @@ footer{text-align:center;color:#7fc9a6;font-size:10px;padding-bottom:18px;}
 .dm .fila .t.r{justify-content:flex-end;}
 .dm .ph2{color:#94a3b8;font-style:italic;font-size:12px;}
 .dm .gana{font-size:11px;font-weight:800;color:#047857;margin-top:2px;}
+.pr{background:#fff;border:1px solid #d3ecdf;border-radius:12px;padding:7px 9px;margin-bottom:6px;}
+.pr.lock{background:#f1f5f9;border-color:#cbd5e1;}
+.pr .top{display:flex;justify-content:space-between;font-size:10px;color:#64748b;margin-bottom:3px;gap:4px;flex-wrap:wrap;}
+.pr .fila{display:flex;align-items:center;gap:6px;}
+.pr .t{flex:1;font-size:13px;font-weight:600;display:flex;align-items:center;gap:5px;overflow:hidden;white-space:nowrap;text-overflow:ellipsis;}
+.pr .t.r{justify-content:flex-end;}
+.pr .lockTxt{font-size:15px;font-weight:900;color:#334155;min-width:44px;text-align:center;}
+.pr .res{font-size:11px;font-weight:800;margin-top:3px;}
+.pr .res.exa{color:#b45309;} .pr .res.acc{color:#047857;} .pr .res.fal{color:#b91c1c;} .pr .res.pen2{color:#64748b;}
+.statbox{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:10px;}
+.statbox .sb{flex:1;min-width:90px;background:#fff;border-radius:12px;padding:8px;text-align:center;box-shadow:0 1px 4px rgba(0,0,0,.07);}
+.statbox .sb .n{font-size:20px;font-weight:900;color:#065f46;}
+.statbox .sb .l{font-size:10px;color:#64748b;}
 .reset{display:block;margin:14px auto 0;border:none;background:#fee2e2;color:#b91c1c;font-weight:700;font-size:12px;padding:8px 16px;border-radius:99px;cursor:pointer;}
 </style>
 </head>
@@ -91,6 +104,7 @@ footer{text-align:center;color:#7fc9a6;font-size:10px;padding-bottom:18px;}
 <nav>
   <button data-t="grupos" class="on">⚽ Grupos</button>
   <button data-t="dias">📅 Por día</button>
+  <button data-t="prode">🎯 Pronósticos</button>
   <button data-t="terceros">🥉 3ros</button>
   <button data-t="llaves">🏟️ Llaves</button>
 </nav>
@@ -106,6 +120,20 @@ footer{text-align:center;color:#7fc9a6;font-size:10px;padding-bottom:18px;}
   <div id="dias" class="tab">
     <h3>Calendario día a día — hora de Chile</h3>
     <div id="listaDias"></div>
+  </div>
+  <div id="prode" class="tab">
+    <h3>🎯 Polla familiar — pronósticos por partido</h3>
+    <div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center;margin-bottom:8px;">
+      <select id="persona" onchange="renderProde()" style="font-size:14px;font-weight:700;border:2px solid #047857;border-radius:9px;padding:7px;background:#fff;"></select>
+      <input id="nuevaPersona" placeholder="Nombre nuevo participante" style="flex:1;min-width:140px;font-size:13px;border:2px solid #9fd6bb;border-radius:9px;padding:7px;">
+      <button onclick="addPersona()" style="border:none;background:#047857;color:#fff;font-weight:800;border-radius:9px;padding:8px 14px;cursor:pointer;">+ Agregar</button>
+    </div>
+    <div id="prodeInfo" class="note" style="margin-bottom:8px;"></div>
+    <div id="prodeStats"></div>
+    <div id="prodeLista"></div>
+    <div style="position:sticky;bottom:8px;text-align:center;margin-top:8px;">
+      <button id="btnGuardarProde" onclick="guardarProde()" style="border:none;background:var(--oro);color:#06281e;font-weight:900;font-size:14px;border-radius:99px;padding:11px 22px;cursor:pointer;box-shadow:0 4px 14px rgba(0,0,0,.3);">🔒 Guardar pronósticos (definitivo)</button>
+    </div>
   </div>
   <div id="terceros" class="tab">
     <h3>Ranking de terceros — los 8 mejores avanzan</h3>
@@ -334,6 +362,134 @@ function renderDias(){
   document.getElementById("listaDias").innerHTML=html;
 }
 
+
+// ===== PRONÓSTICOS (POLLA) =====
+// S.personas=[..], S.preds={persona:{p1:{a,b,lock}}}
+if(!S.personas)S.personas=[]; if(!S.preds)S.preds={};
+let prodeTmp={}; // ediciones no guardadas {pN:[a,b]}
+function addPersona(){
+  const inp=document.getElementById("nuevaPersona");
+  const n=(inp.value||"").trim();
+  if(!n)return;
+  if(S.personas.includes(n)){alert("Ese nombre ya existe");return;}
+  S.personas.push(n); S.preds[n]={}; save(); inp.value="";
+  document.getElementById("persona").value=n;
+  renderProde();
+}
+const personaSel=()=>document.getElementById("persona").value||S.personas[0]||"";
+function setPred(p,i,v){
+  const k="p"+p; prodeTmp[k]=prodeTmp[k]||["",""]; prodeTmp[k][i]=v;
+}
+function realDe(p){
+  // resultado real: grupos en S.scores, eliminatoria en S.ko
+  if(S.scores["p"+p]){const s=S.scores["p"+p]; if(s[0]!==""&&s[1]!==""&&s[0]!=null&&s[1]!=null)return[+s[0],+s[1]];}
+  if(S.ko[p]&&S.ko[p].a!==""&&S.ko[p].b!==""&&S.ko[p].a!=null&&S.ko[p].b!=null)return[+S.ko[p].a,+S.ko[p].b];
+  return null;
+}
+function puntosPred(pr,re){
+  // 3 pts marcador exacto · 1 pt acierta ganador/empate · 0 falla
+  if(pr[0]===re[0]&&pr[1]===re[1])return 3;
+  const sg=x=>x[0]>x[1]?1:x[0]<x[1]?-1:0;
+  return sg(pr)===sg(re)?1:0;
+}
+function statsDe(nombre){
+  const pd=S.preds[nombre]||{};
+  let pts=0,exa=0,acc=0,fal=0,eval_=0,tot=0;
+  for(const k of Object.keys(pd)){
+    if(!pd[k].lock)continue; tot++;
+    const re=realDe(+k.slice(1)); if(!re)continue;
+    eval_++;
+    const p=puntosPred([+pd[k].a,+pd[k].b],re);
+    pts+=p; if(p===3)exa++; else if(p===1)acc++; else fal++;
+  }
+  return {pts,exa,acc,fal,eval:eval_,tot};
+}
+function guardarProde(){
+  const per=personaSel();
+  if(!per){alert("Primero agrega un participante");return;}
+  const listos=Object.entries(prodeTmp).filter(([k,v])=>v[0]!==""&&v[1]!==""&&v[0]!=null&&v[1]!=null);
+  if(!listos.length){alert("No hay pronósticos nuevos completos para guardar");return;}
+  const det=listos.slice(0,8).map(([k])=>"P"+k.slice(1)).join(", ")+(listos.length>8?"…":"");
+  if(!confirm("⚠️ "+per+": vas a guardar "+listos.length+" pronóstico(s) ("+det+").\n\nUNA VEZ GUARDADOS NO SE PUEDEN CAMBIAR.\n\n¿Estás seguro?"))return;
+  S.preds[per]=S.preds[per]||{};
+  for(const [k,v] of listos) S.preds[per][k]={a:+v[0],b:+v[1],lock:true};
+  prodeTmp={}; save(); renderProde();
+}
+function renderProde(){
+  const sel=document.getElementById("persona");
+  sel.innerHTML=S.personas.map(p=>`<option ${p===sel.value?"selected":""}>${p}</option>`).join("");
+  const per=personaSel();
+  const info=document.getElementById("prodeInfo");
+  if(!per){
+    info.textContent="Agrega participantes (tú, Tomás, la familia…). Cada uno pronostica el marcador de todos los partidos. Una vez guardado, el pronóstico queda sellado 🔒.";
+    document.getElementById("prodeStats").innerHTML="";
+    document.getElementById("prodeLista").innerHTML="";
+    return;
+  }
+  info.innerHTML=`Pronosticando como <b>${per}</b> · Puntaje: <b>3 pts</b> marcador exacto · <b>1 pt</b> acierta ganador o empate · <b>0</b> falla.`;
+  // ranking
+  const rk=S.personas.map(n=>Object.assign({n},statsDe(n))).sort((a,b)=>b.pts-a.pts||b.exa-a.exa);
+  const me=rk.find(r=>r.n===per);
+  let st=`<div class="statbox">
+    <div class="sb"><div class="n">${me.pts}</div><div class="l">PUNTOS</div></div>
+    <div class="sb"><div class="n">${me.exa}</div><div class="l">EXACTOS 🎯</div></div>
+    <div class="sb"><div class="n">${me.acc}</div><div class="l">ACIERTA GANADOR</div></div>
+    <div class="sb"><div class="n">${me.eval?Math.round(100*(me.exa+me.acc)/me.eval):0}%</div><div class="l">EFECTIVIDAD (${me.eval} evaluados)</div></div>
+  </div>`;
+  if(S.personas.length>1){
+    st+=`<table style="margin-bottom:10px;"><tr><th>#</th><th style="text-align:left">Participante</th><th>Pts</th><th>🎯</th><th>✓</th><th>✗</th><th>%</th></tr>`+
+      rk.map((r,i)=>`<tr class="${r.n===per?'q1':''}"><td><b>${i===0?"🏆":i+1}</b></td><td class="eq">${r.n}</td><td><b>${r.pts}</b></td><td>${r.exa}</td><td>${r.acc}</td><td>${r.fal}</td><td>${r.eval?Math.round(100*(r.exa+r.acc)/r.eval):0}%</td></tr>`).join("")+"</table>";
+  }
+  document.getElementById("prodeStats").innerHTML=st;
+  // lista de partidos
+  const pd=S.preds[per]||{};
+  const arr=todosLosPartidos();
+  const dias={};
+  for(const m of arr)(dias[m.f]=dias[m.f]||[]).push(m);
+  let html="";
+  for(const f of Object.keys(dias).sort((a,b)=>ORDEN_FECHA(a)-ORDEN_FECHA(b))){
+    html+=`<div class="dia"><h4>📅 ${f}</h4>`;
+    for(const m of dias[f]){
+      let T1,T2;
+      if(m.tipo==="g"){T1=GRUPOS[m.L][m.h];T2=GRUPOS[m.L][m.a];}
+      else{const [A,B]=teamsOf(m.p);T1=A?team2(A):null;T2=B?team2(B):null;}
+      const k="p"+m.p, locked=pd[k]&&pd[k].lock;
+      const re=realDe(m.p);
+      let cuerpo;
+      if(locked){
+        let res="";
+        if(re){
+          const p=puntosPred([pd[k].a,pd[k].b],re);
+          res=p===3?`<div class="res exa">🎯 ¡Exacto! +3 pts (real ${re[0]}-${re[1]})</div>`
+             :p===1?`<div class="res acc">✓ Acertaste el resultado +1 pt (real ${re[0]}-${re[1]})</div>`
+                   :`<div class="res fal">✗ Fallaste (real ${re[0]}-${re[1]})</div>`;
+        } else res=`<div class="res pen2">🔒 Sellado · partido pendiente</div>`;
+        cuerpo=`<div class="fila">
+          <span class="t r">${T1?T1[0]+" ":""}${T1?flag(T1):'<span class="ph2">por definir</span>'}</span>
+          <span class="lockTxt">${pd[k].a} : ${pd[k].b}</span>
+          <span class="t">${T2?flag(T2)+" "+T2[0]:'<span class="ph2">por definir</span>'}</span>
+        </div>${res}`;
+      } else if(!T1||!T2){
+        cuerpo=`<div class="fila"><span class="ph2" style="flex:1;text-align:center;">Equipos por definir — podrás pronosticar cuando se conozcan</span></div>`;
+      } else {
+        const tmp=prodeTmp[k]||["",""];
+        cuerpo=`<div class="fila">
+          <span class="t r">${T1[0]} ${flag(T1)}</span>
+          <input class="sc" type="number" min="0" inputmode="numeric" value="${tmp[0]}" onchange="setPred(${m.p},0,this.value)">
+          <b style="color:#94a3b8">:</b>
+          <input class="sc" type="number" min="0" inputmode="numeric" value="${tmp[1]}" onchange="setPred(${m.p},1,this.value)">
+          <span class="t">${flag(T2)} ${T2[0]}</span>
+        </div>`;
+      }
+      html+=`<div class="pr ${locked?'lock':''}">
+        <div class="top"><span><b>${m.t} hrs</b> · ${m.fase} · P${m.p}</span><span>${SEDE[m.v][0]}</span></div>
+        ${cuerpo}</div>`;
+    }
+    html+=`</div>`;
+  }
+  document.getElementById("prodeLista").innerHTML=html;
+}
+
 // ===== RENDER =====
 function render(){
   document.getElementById("gsel").innerHTML=LET.map(L=>
@@ -394,6 +550,7 @@ function render(){
   document.getElementById("cuadro").innerHTML=fases.map(([tit,ps,g4])=>
     `<div class="fase"><h3>${tit}</h3><div class="kogrid ${g4}">${ps.map(([m,f,t,v])=>koCard(m,f,t,v)).join("")}</div></div>`).join("");
   renderDias();
+  if(document.getElementById("prode").classList.contains("on"))renderProde();
   const c=winner(104), el=document.getElementById("champ");
   if(c){el.style.display="block";el.innerHTML="🏆 CAMPEÓN: "+flag(team2(c))+" "+c.name+" 🏆";}else el.style.display="none";
 }
@@ -407,6 +564,7 @@ document.querySelectorAll("nav button").forEach(b=>b.onclick=()=>{
   document.querySelectorAll("nav button").forEach(x=>x.classList.remove("on"));
   document.querySelectorAll(".tab").forEach(x=>x.classList.remove("on"));
   b.classList.add("on"); document.getElementById(b.dataset.t).classList.add("on");
+  if(b.dataset.t==="prode")renderProde();
 });
 render();
 </script>
